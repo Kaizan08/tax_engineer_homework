@@ -7,6 +7,7 @@ from helper_functions import (
     split_deck,
 )
 
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(message)s',
@@ -18,45 +19,85 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--auto', action='store_true', help='Prevent request for user action, move game along automatically')
 parser.add_argument('--output', nargs='?', const='gameplay.log', default=False, help='Auto play game and output the game results to a log file')
 parser.add_argument('--suit-up', action='store_true', help='run game with "suit up" house rule')
+parser.add_argument('--with-advantage', action='store_true', help='run game with "with advantage" house rule')
 args = parser.parse_args()
 
-def play_round(player_1_hand, player_2_hand, player_1_played_cards, player_2_played_cards, player_1_discard, player_2_discard, deal=1, reversed=False):
+
+def game_comparison(function, info="", **kwargs):
+    logger.info(info)
+    return function(**kwargs)
+
+
+def handle_with_advantage(player1, player2, comparison):
+    if comparison == 8:  # Player 1 has the King
+        handle_shifting_cards_scenarios(player1, player2, deal=1, reverse=False)
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+        if comparison == 1:  # Player 1 gets all the cards /wins
+            player1.update_wins(player2.played_cards)
+        else:
+            check_and_refill_hand(player1.hand, player1.discard)
+            comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+            player1.update_wins(player2.played_cards) if comparison == 1 else player2.update_wins(player1.played_cards)
+    else:  # Player 2 has the King
+        # Reverse the logic above and clean it up
+        handle_shifting_cards_scenarios(player1, player2, deal=1, reverse=False)
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+        if comparison == 2:
+            player2.update_wins(player1.played_cards)
+        else:
+            check_and_refill_hand(player2.hand, player2.discard)
+            comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+            player2.update_wins(player1.played_cards) if comparison == 2 else player1.update_wins(player2.played_cards)
+
+
+def finalize_outcome(comparison, player1, player2, reverse):
+    """Still need to refactor this now that adding in with_advantage and other game_types"""
+    if comparison == 1:
+        player1.update_wins(player2.played_cards)
+    elif comparison == 2:
+        player2.update_wins(player1.played_cards)
+    elif comparison in [0, 3]:
+        return game_comparison(play_round, player1=player1, player2=player2, deal=4 if comparison == 0 else 2, reverse=reverse)
+    elif comparison in [8, 9]:
+        return handle_with_advantage(player1, player2, comparison)
+    return None
+
+
+def play_round(player1, player2, deal=1, reverse=False):
     '''
     Single round of gameplay, wars are considered part of the same round, and are recursively called
     '''
     if (not args.auto) and not(args.output): input('Press Enter to play')
 
+    handle_shifting_cards_scenarios(player1, player2, deal, reverse)
+    if args.with_advantage:
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+    else:
+        comparison = compare_cards(player1.played_cards[-1],
+                                   player2.played_cards[-1],
+                                   suit_up_active=(args.suit_up and deal != 4))  # check if deal is 4, if it is it's a regular war and you can't enter suit-up
+
+    # Clean up outputs to model class
+    player1.output(True if comparison == 1 else False)
+    player2.output(True if comparison == 2 else False)
+
+    finalize_outcome(comparison, player1, player2, reverse)
+
+
+def handle_shifting_cards_scenarios(player1, player2, deal, reverse):
+    """This is to pull out logic for more getting card scenarios for all game types"""
     for _ in range(0, deal):
-        if not any([any(player_1_hand), any(player_1_discard), any(player_2_hand), any(player_2_discard)]):
+        if not any([any(player1.hand), any(player1.discard), any(player2.hand), any(player2.discard)]):
             # Players have played all cards in one long series of wars, just compare on the last card or draw
             # assume suit_up can't activate on this last hand
-            return compare_cards(player_1_played_cards[-1], player_2_played_cards[-1], suit_up_active=False)
+            return compare_cards(player1.played_cards[-1], player2.played_cards[-1], suit_up_active=False)
 
-        player_2_win = check_and_refill_hand(player_1_hand, player_1_discard)
-        if player_2_win: return 2
-        player_1_played_cards.append(player_1_hand.pop(0 if reversed else -1))
+        if check_and_refill_hand(player1.hand, player1.discard): return 2
+        player1.update_played_cards(player1.hand.pop(0 if reverse else -1))
 
-        player_1_win = check_and_refill_hand(player_2_hand, player_2_discard)
-        if player_1_win: return 1
-        player_2_played_cards.append(player_2_hand.pop(0 if reversed else -1))
+        if check_and_refill_hand(player2.hand, player2.discard): return 1
+        player2.update_played_cards(player2.hand.pop(0 if reverse else -1))
 
-    comparison = compare_cards(player_1_played_cards[-1], player_2_played_cards[-1], suit_up_active=(args.suit_up and deal != 4))  # check if deal is 4, if it is it's a regular war and you can't enter suit-up
-
-    logger.info(f"P1: H:{str(len(player_1_hand)).ljust(2)} | D:{str(len(player_1_discard)).ljust(2)} | {player_1_played_cards}{'*' if comparison == 1 else ' '}")
-    logger.info(f"P2: H:{str(len(player_2_hand)).ljust(2)} | D:{str(len(player_2_discard)).ljust(2)} | {player_2_played_cards}{'*' if comparison == 2 else ' '}")
-
-    if comparison == 1:
-        player_1_discard += player_1_played_cards + player_2_played_cards
-    elif comparison == 2:
-        player_2_discard += player_2_played_cards + player_1_played_cards
-    elif comparison == 0:
-        logger.info("War!")
-        return play_round(player_1_hand, player_2_hand, player_1_played_cards, player_2_played_cards, player_1_discard, player_2_discard, deal=4)
-    elif comparison == 3:
-        logger.info("Suit Up!")
-        return play_round(player_1_hand, player_2_hand, player_1_played_cards, player_2_played_cards, player_1_discard, player_2_discard, deal=2, reversed=True)
-
-    return None  # no winner yet
 
 def play_war():
     '''
@@ -65,16 +106,15 @@ def play_war():
 
     #setup deck and player data objects
     deck = get_shuffled_deck()
-    player_1_hand, player_2_hand = split_deck(deck)
-    player_1_discard, player_2_discard = [], []
+    player1, player2 = split_deck(deck, logger=logger)
     round = 1
 
     while(True):
         #game play loop
         assert round < 10000, "infinite loop suspected"  # if player's don't grab their own deck first when picking up cards, the game can enter infinite loops
-        player_1_played_cards, player_2_played_cards = [], []
+        player1.played_cards, player2.played_cards = [], []
         logger.info(f'---- Round {round} ----')
-        winner = play_round(player_1_hand, player_2_hand, player_1_played_cards, player_2_played_cards, player_1_discard, player_2_discard, deal=1)
+        winner = play_round(player1, player2, deal=1)
         if winner:
             logger.info(f'Player {winner} Wins in {round} rounds!')
             break
@@ -83,17 +123,16 @@ def play_war():
             break
 
         # move cards from discard to hand if hand is empty
-        player_2_wins = check_and_refill_hand(player_1_hand, player_1_discard)
-        if player_2_wins:
+        if check_and_refill_hand(player1.hand, player1.discard):
             logger.info(f'Player 2 Wins in {round} rounds!')
             break
 
-        player_1_wins = check_and_refill_hand(player_2_hand, player_2_discard)
-        if player_1_wins:
+        if check_and_refill_hand(player2.hand, player2.discard):
             logger.info(f'Player 1 Wins in {round} rounds!')
             break
 
         round += 1
+
 
 if __name__ == '__main__':
     if args.output:
