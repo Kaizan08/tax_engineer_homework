@@ -1,1 +1,2 @@
 1st commit: Made tests for the logic portion of the application and made sure they run.
+2nd commit: Large refactor to simplify using a Player model that decouples some of the logic and makes it easier to read.

@@ -1,4 +1,5 @@
 import random
+from models import Player
 
 def get_shuffled_deck():
     '''
@@ -10,13 +11,13 @@ def get_shuffled_deck():
     random.shuffle(deck)
     return deck
 
-def split_deck(deck):
+def split_deck(deck, logger):
     '''Give half a deck to each player
     player 2 get's larger pile if there are an odd number of cards
     '''
-    player_1_hand = deck[:len(deck)//2]
-    player_2_hand = deck[len(deck) - len(player_1_hand):]
-    return player_1_hand, player_2_hand
+    player1 = Player('P1', logger, deck[:len(deck)//2], [])
+    player2 = Player('P2', logger, deck[len(deck) - len(player1.hand):], [])
+    return player1, player2
 
 def map_card_to_numeric(card):
     '''Turn String values of cards into numeric representations for comparison'''
