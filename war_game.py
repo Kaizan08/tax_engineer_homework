@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--auto', action='store_true', help='Prevent request for user action, move game along automatically')
 parser.add_argument('--output', nargs='?', const='gameplay.log', default=False, help='Auto play game and output the game results to a log file')
 parser.add_argument('--suit-up', action='store_true', help='run game with "suit up" house rule')
+
 args = parser.parse_args()
 
 
@@ -46,7 +47,8 @@ def play_round(player1, player2, deal=1, reversed=False):
     elif comparison == 2:
         player2.update_wins(player1.played_cards)
     elif comparison in [0, 3]:
-        return game_comparison(play_round, player1=player1, player2=player2, deal=deal, reversed=reversed)
+
+        return game_comparison(play_round, player1=player1, player2=player2, deal=4 if comparison == 0 else 2, reversed=reversed)
 
     return None  # no winner yet
 
