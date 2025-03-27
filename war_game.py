@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--auto', action='store_true', help='Prevent request for user action, move game along automatically')
 parser.add_argument('--output', nargs='?', const='gameplay.log', default=False, help='Auto play game and output the game results to a log file')
 parser.add_argument('--suit-up', action='store_true', help='run game with "suit up" house rule')
-
+parser.add_argument('--with-advantage', action='store_true', help='run game with "with advantage" house rule')
 args = parser.parse_args()
 
 
@@ -28,32 +28,63 @@ def game_comparison(function, info="", **kwargs):
     return function(**kwargs)
 
 
-def play_round(player1, player2, deal=1, reversed=False):
-    '''
-    Single round of gameplay, wars are considered part of the same round, and are recursively called
-    '''
-    if (not args.auto) and not(args.output): input('Press Enter to play')
+def handle_with_advantage(player1, player2, comparison):
+    if comparison == 8:  # Player 1 has the King
+        handle_shifting_cards_scenarios(player1, player2, deal=1, reverse=False)
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+        if comparison == 1:  # Player 1 gets all the cards /wins
+            player1.update_wins(player2.played_cards)
+        else:
+            check_and_refill_hand(player1.hand, player1.discard)
+            comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+            player1.update_wins(player2.played_cards) if comparison == 1 else player2.update_wins(player1.played_cards)
+    else:  # Player 2 has the King
+        # Reverse the logic above and clean it up
+        handle_shifting_cards_scenarios(player1, player2, deal=1, reverse=False)
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+        if comparison == 2:
+            player2.update_wins(player1.played_cards)
+        else:
+            check_and_refill_hand(player2.hand, player2.discard)
+            comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+            player2.update_wins(player1.played_cards) if comparison == 2 else player1.update_wins(player2.played_cards)
 
-    handle_shifting_cards_scenarios(player1, player2, deal, reversed)
-    comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1], suit_up_active=(args.suit_up and deal != 4))  # check if deal is 4, if it is it's a regular war and you can't enter suit-up
 
-    # Clean up outputs to model class
-    player1.output(True if comparison == 1 else False)
-    player2.output(True if comparison == 2 else False)
-
-    # Simplified this, but could do more
+def finalize_outcome(comparison, player1, player2, reverse):
+    """Still need to refactor this now that adding in with_advantage and other game_types"""
     if comparison == 1:
         player1.update_wins(player2.played_cards)
     elif comparison == 2:
         player2.update_wins(player1.played_cards)
     elif comparison in [0, 3]:
+        return game_comparison(play_round, player1=player1, player2=player2, deal=4 if comparison == 0 else 2, reverse=reverse)
+    elif comparison in [8, 9]:
+        return handle_with_advantage(player1, player2, comparison)
+    return None
 
-        return game_comparison(play_round, player1=player1, player2=player2, deal=4 if comparison == 0 else 2, reversed=reversed)
 
-    return None  # no winner yet
+def play_round(player1, player2, deal=1, reverse=False):
+    '''
+    Single round of gameplay, wars are considered part of the same round, and are recursively called
+    '''
+    if (not args.auto) and not(args.output): input('Press Enter to play')
+
+    handle_shifting_cards_scenarios(player1, player2, deal, reverse)
+    if args.with_advantage:
+        comparison = compare_cards(player1.played_cards[-1], player2.played_cards[-1])
+    else:
+        comparison = compare_cards(player1.played_cards[-1],
+                                   player2.played_cards[-1],
+                                   suit_up_active=(args.suit_up and deal != 4))  # check if deal is 4, if it is it's a regular war and you can't enter suit-up
+
+    # Clean up outputs to model class
+    player1.output(True if comparison == 1 else False)
+    player2.output(True if comparison == 2 else False)
+
+    finalize_outcome(comparison, player1, player2, reverse)
 
 
-def handle_shifting_cards_scenarios(player1, player2, deal, reversed):
+def handle_shifting_cards_scenarios(player1, player2, deal, reverse):
     """This is to pull out logic for more getting card scenarios for all game types"""
     for _ in range(0, deal):
         if not any([any(player1.hand), any(player1.discard), any(player2.hand), any(player2.discard)]):
@@ -62,10 +93,10 @@ def handle_shifting_cards_scenarios(player1, player2, deal, reversed):
             return compare_cards(player1.played_cards[-1], player2.played_cards[-1], suit_up_active=False)
 
         if check_and_refill_hand(player1.hand, player1.discard): return 2
-        player1.update_played_cards(player1.hand.pop(0 if reversed else -1))
+        player1.update_played_cards(player1.hand.pop(0 if reverse else -1))
 
         if check_and_refill_hand(player2.hand, player2.discard): return 1
-        player2.update_played_cards(player2.hand.pop(0 if reversed else -1))
+        player2.update_played_cards(player2.hand.pop(0 if reverse else -1))
 
 
 def play_war():

@@ -28,7 +28,7 @@ def map_card_to_numeric(card):
     elif suitless == 'K': return 13
     else: return int(suitless) if int(suitless) != 1 else 14  # aces high
 
-def compare_cards(card_1, card_2, suit_up_active=False):
+def compare_cards(card_1, card_2, suit_up_active=False, with_advantage=False):
     '''
     return
         0 if they're the same
@@ -40,6 +40,19 @@ def compare_cards(card_1, card_2, suit_up_active=False):
     numeric_2 = map_card_to_numeric(card_2)
     if numeric_1 == numeric_2: return 0
     elif suit_up_active and (card_1[-1] == card_2[-1]): return 3
+    elif with_advantage and (card_1[0] == 'K' and card_2[0] == 'Q'): return 8  # Player1 would be K refactor if time
+    elif with_advantage and (card_1[0] == 'Q' and card_2[0] == 'K'): return 9  # Player2 would be K refactor if time
+    elif numeric_1 > numeric_2: return 1
+    elif numeric_1 < numeric_2: return 2
+    raise Exception(f"Comparison detected something unexpected: {card_1} vs. {card_2}")
+
+def compare_cards_with_advantage(card_1, card_2, with_advantage=False):
+    """Refactor out the suit_up and this function to more appropriate and more DRY"""
+    numeric_1 = map_card_to_numeric(card_1)
+    numeric_2 = map_card_to_numeric(card_2)
+    if numeric_1 == numeric_2: return 0
+    elif with_advantage and (card_1[0] == 'K' and card_2[0] == 'Q'): return 8  # Player1 would be K refactor if time
+    elif with_advantage and (card_1[0] == 'Q' and card_2[0] == 'K'): return 9
     elif numeric_1 > numeric_2: return 1
     elif numeric_1 < numeric_2: return 2
     raise Exception(f"Comparison detected something unexpected: {card_1} vs. {card_2}")
