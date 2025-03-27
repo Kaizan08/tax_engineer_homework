@@ -1,0 +1,1 @@
+1st commit: Made tests for the logic portion of the application and made sure they run.
